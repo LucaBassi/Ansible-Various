@@ -13,19 +13,14 @@
 
 ### Ansible functioning by steps (available in ansible script)
 
-#### 1
-- Update apt repostories
-
-#### 2
-- Make needed directories
-- Download Modsecurity git repository
-- Call script to commpil Modsecurity
-
-#### 3
-- Dynamically get the current version of Nginx
-- Clone ModSecurity-nginx
-- Download the source code corresponding to the installed version of NGINX
-- Call script to commpil Modsecurity Connector to connect it to running Nginx
+1. Update apt repostories
+2. - Make needed directories
+   - Download Modsecurity git repository
+   - Call script to commpil Modsecurity
+3. - Dynamically get the current version of Nginx
+   - Clone ModSecurity-nginx
+   - Download the source code corresponding to the installed version of NGINX
+   - Call script to commpil Modsecurity Connector to connect it to running Nginx
 
 #### 4
 - Configure ModSecurity with recommanded configuration
