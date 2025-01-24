@@ -13,7 +13,7 @@
 
 ### Ansible functioning by steps (available in ansible script)
 
-1. Update apt repostories
+1. - Update apt repostories
 2. - Make needed directories
    - Download Modsecurity git repository
    - Call script to commpil Modsecurity
@@ -21,35 +21,18 @@
    - Clone ModSecurity-nginx
    - Download the source code corresponding to the installed version of NGINX
    - Call script to commpil Modsecurity Connector to connect it to running Nginx
-
-#### 4
-- Configure ModSecurity with recommanded configuration
-
-#### 5
-- Load new Module in Nginx Configuration 
-- Make needed directories
-- Copy the main configuration of Modsecurity
-- Modify modesurity.conf for 
-  - to log HTTP transactions
-  - the audit log
-  - (the body response (commented in ansible script))
-
-#### 6
-- Download and includ CRS-Rules in Modsecurity
-  
-#### 7
-- Refer the HoneyPot Project API IP blacklist in CRS
-
-#### 8
-- Configure logrotation
-
-#### 9
-- Delete build folder
-- Purge unwanted packages
-- Restart Nginx
-
-## Test
-See file called "ModSecurity_tests.md"
+4. - Configure ModSecurity with recommanded configuration
+5. - Load new Module in Nginx Configuration
+   - Make needed directories
+   - Copy the main configuration of Modsecurity
+   - Modify modesurity.conf to log HTTP transactions
+   - the audit log (the body response (commented in ansible script))
+6. - Download and includ CRS-Rules in Modsecurity
+7. - Refer the HoneyPot Project API IP blacklist in CRS
+8. - Configure logrotation
+9. - Delete build folder
+   - Purge unwanted packages
+   - Restart Nginx
 
 ## Sources
 https://www.linuxbabe.com/security/modsecurity-nginx-debian-ubuntu  
