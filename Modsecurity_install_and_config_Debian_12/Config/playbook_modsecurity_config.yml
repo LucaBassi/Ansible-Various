@@ -1,0 +1,137 @@
+---
+###################################################################################
+# Purpose       :   Download and setup Modsecurity and CoreRulesSet for Nginx
+# Author        :   Luca Bassi
+# Date          :   25.10.2023
+# Version       :   1.2
+# Dependencies  :   
+#   at . of playbook
+#   - install_vars
+#   in folder /install_file
+#   - main.conf
+###############################################################################
+#   in folder ./config_files/modsec_individual_sites_config/
+#     - main.conf
+#   in folders ./config_files/modsec_individual_sites_config/["fqdn"]/individual.conf
+#     - individual.conf
+###################################################################################
+
+#------------------------------------------------------------
+#
+# 0 – General Ansible configuration
+#
+#------------------------------------------------------------
+
+- hosts: rp-ms.louc.ch
+  
+  vars:
+  
+    coreruleset_version: '3.3.5'
+
+  become: yes
+  tasks:
+    
+    - read_csv:
+        path: sites_list/sites.csv
+        delimiter: ';'
+      register: sites
+      delegate_to: localhost
+
+    - debug: 
+        msg: "fqdn : {{ sites}} \nip : {{ site.ip_address }}"
+      loop: "{{ sites.list }}"
+      loop_control:
+        loop_var: site  
+#------------------------------------------------------------
+#
+# 5 – Modifiy Nginx configuration, backup config files, enable site
+#
+#------------------------------------------------------------
+
+    - name: Show result
+      debug:
+        msg: "{{ sites }}"
+      when: (sites.list != [])
+
+    - name: make directory
+      file: 
+        path: /etc/nginx/backup_configs
+        state: directory 
+      when: (sites.list != []) 
+
+    - name: Backup files sites enabled
+      copy:
+        src: "/etc/nginx/conf.d/" 
+        dest: /etc/nginx/backup_configs/
+        remote_src: yes
+      when: (sites.list != []) 
+      
+#    - name: make sub directory in /etc/nginx/mod
+#      file: 
+#        path: /etc/nginx/modsec/individual_sites_conf 
+#        state: directory 
+#      when: (sites.list != []) 
+#
+#    - name: make sub directory in /etc/nginx/mod
+#      file: 
+#        path: /etc/nginx/modsec/individual_sites_conf/{{ site.fqdn }} 
+#        state: directory 
+#      loop: "{{ sites.list }}"
+#      loop_control:
+#        loop_var: site  
+#      when: (sites.list != []) 
+
+    - name: Enable Modesecurity and refer config files
+      replace:
+        path: "/etc/nginx/conf.d/{{ site.fqdn }}.conf"
+        regexp: '^server {'
+        replace: server { \n\tmodsecurity on;\n\tmodsecurity_rules_file /etc/nginx/modsec/main.conf;
+      loop: "{{ sites.list }}"
+      loop_control:
+        loop_var: site  
+      when: (sites.list != []) 
+      
+    - name: copy ModSecurity main rules file 
+      template:
+        src: config_files/main.conf
+        dest: "/etc/nginx/modsec/main.conf"
+
+#    - name: "get files from dir"
+#      find:
+#        paths: "config_files/modsec_individual_sites_config"
+##        recurse: yes
+#        file_type: directory
+#      delegate_to: localhost
+#      register: config_files
+#      when: (sites.list != []) 
+#
+#    - name: copy ModSecurity main rules file 
+#      template:
+#        src: '{{site.path}}/individual.conf'
+#        dest: "/etc/nginx/modsec/individual_sites_conf/{{ site.path | basename }}/individual.conf"
+#      with_items: "{{ config_files.files }}"     
+#      when: (sites.list != []) 
+#
+#    - name: Replace foo with bar in the files
+#      replace:
+#        path: "/etc/nginx/conf.d/{{ site.path | basename }}.conf"
+#        regexp: 'modsecurity on;'
+#        replace: 'modsecurity on;\n\tmodsecurity_rules_file /etc/nginx/modsec/individual_sites_conf/{{ site.path | basename }}/individual.conf;'
+#      with_items: "{{ config_files.files }}"
+#      when: (sites.list != []) 
+
+#------------------------------------------------------------
+#
+# 8 – Finalise
+#
+#------------------------------------------------------------
+
+    - name: "Reload Nginx config witjout restart"
+      shell: "nginx -s reload"
+      args:
+        executable: /bin/bash
+      register: result
+
+    - name: Show result
+      debug:
+        msg: "{{ result }}"

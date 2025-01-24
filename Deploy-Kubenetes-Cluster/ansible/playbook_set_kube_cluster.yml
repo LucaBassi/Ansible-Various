@@ -1,0 +1,339 @@
+###################################################################################
+# Purpose       :   Create new RP website and vreate Certbot SSL certificate by sites
+# Author        :   Luca Bassi
+# Date          :   25.10.2023
+# Version       :   1.1
+# Dependencies  :   None
+###################################################################################
+
+- name: playbook_kube_cluster 
+
+#------------------------------------------------------------
+#
+# 0 – General Ansible configuration
+#
+#------------------------------------------------------------
+
+  hosts: 
+    - srv-kube-01
+    - srv-kube-02
+
+  become: yes
+
+  vars:
+  
+    coreruleset_version: '3.3.5'
+
+    apt_prepare_packages_install:
+      - 'gpg'
+      - 'apt-transport-https'
+      - 'ca-certificates'
+      - 'curl'
+
+    apt_packages_install:
+
+      - 'containerd.io'
+      - 'docker-ce'
+      - 'docker-ce-cli'
+      - 'docker-buildx-plugin'
+      - 'docker-compose-plugin'
+      - 'kubeadm'
+      - 'kubelet'
+      - 'kubectl' 
+      - 'python3'
+
+    holded_apt_packages_install:
+      - 'kubeadm'
+      - 'kubelet'
+      - 'kubectl' 
+
+
+  tasks:
+
+#------------------------------------------------------------
+# Apt updates
+#------------------------------------------------------------
+
+    - name: Refer Hostname in node 1
+      when: inventory_hostname in groups['srv_kube_01']
+      lineinfile:
+        path: "/etc/hosts"
+        line: 192.168.188.7 srv-kubenode-02
+
+    - name: Refer Hostname in node 2
+      when: inventory_hostname in groups['srv_kube_02']
+      lineinfile:
+        path: "/etc/hosts"
+        line: 192.168.188.5 srv-kubenode-01
+
+
+    - name: Disable SWAP
+      shell: swapoff -a
+
+
+    - name: Update and upgrade apt packages
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400 #One day
+
+    - name: Install Prerequisite Packages
+      apt: 
+        name: "{{ item }}" 
+        update_cache: yes 
+        state: latest
+      loop: "{{apt_prepare_packages_install}}" 
+
+
+    # save gpg key locally
+    - name: Add the Docker repository GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/debian/gpg
+
+    - name: Add the Docker repository
+      apt_repository:
+        repo: 'deb https://download.docker.com/linux/debian bookworm stable'
+        state: present
+
+    # save gpg key locally
+    - name: Add the k8s GPG key
+      ansible.builtin.apt_key:
+        url: https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key
+
+    - name: Add the k8s repository
+      apt_repository:
+        repo: 'deb https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /'
+        state: present
+
+    # save gpg key locally
+    - name: Add the Helm repository GPG key
+      when: inventory_hostname in groups['srv_kube_01']
+      ansible.builtin.apt_key:
+        url: https://baltocdn.com/helm/signing.asc
+
+    - name: Add the Helm repository
+      when: inventory_hostname in groups['srv_kube_01']
+      apt_repository:
+        repo: 'deb https://baltocdn.com/helm/stable/debian/ all main'
+        state: present
+
+
+    - name: Refresh apt cache
+      apt:
+        update-cache: yes
+
+    - name: Install Prerequisite Packages
+      apt: 
+        name: "{{ item }}" 
+        update_cache: yes 
+        state: latest
+      loop: "{{apt_packages_install}}" 
+
+
+    - name: Install Prerequisite Packages
+      when: inventory_hostname in groups['srv_kube_01']
+      apt: 
+        name: python3-kubernetes 
+        update_cache: yes 
+        state: latest
+
+    - name: Install Prerequisite Packages
+      when: inventory_hostname in groups['srv_kube_01']
+      apt: 
+        name: helm 
+        state: latest
+
+
+    - name: Default config in config.toml
+      shell: containerd config default | tee /etc/containerd/config.toml
+
+
+    - name: modify file config.toml 1
+      replace:
+        path: "/etc/containerd/config.toml"
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+
+
+    - name: Restart service httpd, in all cases
+      ansible.builtin.service:
+        name: containerd
+        state: restarted
+
+    - name: Hold updates
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{holded_apt_packages_install}}" 
+
+
+    - name: create modules file k8s.conf
+      file: 
+        path: /etc/modules-load.d/k8s.conf
+        state: touch
+
+    - name: Configure modules in k8s.conf
+      blockinfile:
+        path: /etc/modules-load.d/k8s.conf
+        block: |
+          overlay
+          br_netfilter
+
+
+    - name: modprobe overlay
+      shell: modprobe overlay
+
+    - name: modprobe br_netfilter
+      shell: modprobe br_netfilter
+
+
+    - name: create k8s.conf
+      file: 
+        path: /etc/sysctl.d/k8s.conf
+        state: touch
+
+    - name: Configure network in k8s.conf
+      blockinfile:
+        path: /etc/sysctl.d/k8s.conf
+        block: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+
+
+    - name: sysctl --system
+      shell: sysctl --system
+
+
+    - name: kubeadm init
+      when: inventory_hostname in groups['srv_kube_01']
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16
+      register: kubeinit_result
+      changed_when: False
+
+    - name: Get results of cluster init
+      when: inventory_hostname in groups['srv_kube_01']
+      debug: var=kubeinit_result.stdout
+
+    - set_fact:
+        join_token:   "{{ kubeinit_result.stdout | regex_search('--token\\s(.*?)(?=\\s)') }}"
+        join_token_ca_cert_hash:   "{{ kubeinit_result.stdout | regex_search('--discovery-token-ca-cert-hash\\s(.*?)(?=\\s)') }}"
+      when: inventory_hostname in groups['srv_kube_01']
+
+    - name: Get results of cluster init
+      when: inventory_hostname in groups['srv_kube_01']
+      debug: var=join_token.stdout
+
+    - name: Get results of cluster init
+      when: inventory_hostname in groups['srv_kube_01']
+      debug: var=join_token_ca_cert_hash.stdout
+
+
+    - name: kubeadm join
+      when: inventory_hostname in groups['srv_kube_02']
+      shell: sudo kubeadm join 192.168.188.5:6443 {{hostvars[groups['srv_kube_01'][0]]['join_token']}} {{hostvars[groups['srv_kube_01'][0]]['join_token_ca_cert_hash']}} 
+      register: join_result
+
+    - name: Print join result
+      debug: var=join_result.stdout
+
+    - name: Disable Swap 
+      shell: swapoff -a
+
+    - name: make directory
+      when: inventory_hostname in groups['srv_kube_01']
+      file: 
+        path: /home/debian/.kube
+        state: directory 
+
+    - name: Create Kube admin Dir
+      when: inventory_hostname in groups['srv_kube_01']
+      copy:
+        src: /etc/kubernetes/admin.conf 
+        dest: /home/debian/.kube/config
+        remote_src: yes
+
+    - name: Change file ownership, group and permissions
+      when: inventory_hostname in groups['srv_kube_01']
+      ansible.builtin.file:
+        path: /home/debian/.kube/config
+        owner: debian
+        group: debian
+
+
+    - name: make directory
+      when: inventory_hostname in groups['srv_kube_01']
+      file: 
+        path: /root/.kube
+        state: directory 
+
+    - name: Create Kube admin Dir
+      when: inventory_hostname in groups['srv_kube_01']
+      copy:
+        src: /etc/kubernetes/admin.conf 
+        dest: /root/.kube/config
+        remote_src: yes
+
+    - name: Change file ownership, group and permissions
+      when: inventory_hostname in groups['srv_kube_01']
+      ansible.builtin.file:
+        path: /root/.kube/config
+        owner: root
+        group: root
+
+    - name: Labelise the worker node
+      when: inventory_hostname in groups['srv_kube_01']
+      shell: kubectl label node srv-kubenode-02 node-role.kubernetes.io/worker=worker
+
+
+    - name: Create Flannel 
+      when: inventory_hostname in groups['srv_kube_01']
+      kubernetes.core.k8s:
+        state: present
+        src:  https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+    - name: Create Storage 
+      when: inventory_hostname in groups['srv_kube_01']
+      kubernetes.core.k8s:
+        state: present
+        src:  https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+
+
+    - name: Upgrade Helm config
+      when: inventory_hostname in groups['srv_kube_01']
+      shell: helm upgrade --install ingress-nginx ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --namespace ingress-nginx --create-namespace
+
+    - name: set the forward IPv4 file
+      when: inventory_hostname in groups['srv_kube_01']
+      shell: bash -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+
+
+    - name: kubeadm join
+      when: inventory_hostname in groups['srv_kube_01']
+      shell: bash -c "iptables -t nat -A PREROUTING -p tcp --dport 8080 -j DNAT --to-destination 127.0.0.1"
+
+    - name: kubeadm join
+      when: inventory_hostname in groups['srv_kube_01']
+      shell: bash -c "iptables -A FORWARD -p tcp -d 127.0.0.1 --dport 80 -j ACCEPT"
+
+
+    - name: Create /opt/cni/bin
+      when: inventory_hostname in groups['srv_kube_01']
+      file: 
+        path: /opt/cni/bin 
+        state: directory 
+
+    - name: Download cni plugin
+      when: inventory_hostname in groups['srv_kube_01']
+      ansible.builtin.get_url:
+        url: https://github.com/containernetworking/plugins/releases/download/v1.2.0/cni-plugins-linux-amd64-v1.2.0.tgz
+        dest:  /opt/cni/bin
+
+    - name: Extract cni plugin to /opt/cni/bin/
+      when: inventory_hostname in groups['srv_kube_01']
+      ansible.builtin.unarchive:
+        src: /opt/cni/bin/cni-plugins-linux-amd64-v1.2.0.tgz
+        dest: /opt/cni/bin/
+        remote_src: true
+
+

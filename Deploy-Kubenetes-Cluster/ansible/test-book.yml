@@ -1,0 +1,36 @@
+- name: playbook_kube_cluster 
+
+  hosts: 
+    - srv-kube-01
+    - srv-kube-02
+
+  become: yes
+  vars:
+
+    databases_apt_packages: 
+      - 'python3'
+  
+  tasks:
+
+
+#    - name: apt install latest - mariadb-server  , python3 , pip
+#      when: inventory_hostname in groups['srv_kube_01']
+#      apt: 
+#        name: "{{ item }}" 
+#        update_cache: yes 
+#        state: latest
+#      loop: "{{users_machine_apt_packages}}" 
+#
+# pip install pymysql
+#------------------------------------------------------------------        
+#    - name: pip install pymysql
+#      when: inventory_hostname in groups['srv_kube_01']
+#      pip:
+#        name: pymysql
+#        state: present
+#
+
+    - name: Get results of cluster init
+      when: inventory_hostname in groups['srv_kube_01']
+      debug: var=hostvars[groups['srv_kube_02'][0]][0]
+

@@ -1,0 +1,121 @@
+#------------------------------------------------------------
+#
+# 0 – General Ansible configuration
+#
+#------------------------------------------------------------
+
+- hosts: rp.myftp.org
+
+  vars:
+
+    sites:
+      site1:
+        name: 'dix-louc.myftp.org'
+        ip: '192.168.1.81'
+      site2:
+        name: 'onze-louc.myftp.org'
+        ip: '192.168.1.82'
+
+    acme_challenge_type: http-01
+    acme_directory: https://acme-v02.api.letsencrypt.org/directory
+    acme_version: 2
+    acme_email: 'support@devantis.com'
+    letsencrypt_dir: /etc/letsencrypt/live/{{ item.value.name }}
+    account_dir: '{{letsencrypt_dir}}/account'
+    letsencrypt_keys_dir: '/etc/letsencrypt/{{ item.value.name }}/keys'
+    letsencrypt_csrs_dir: '/etc/letsencrypt/{{ item.value.name }}/csrs'
+    letsencrypt_certs_dir: '/etc/letsencrypt/{{ item.value.name }}/certs'
+    letsencrypt_account_key: '{{account_dir}}/account.key'
+
+  become: yes
+  tasks:
+
+
+    - name: delete /etc/nginx/sites-enabled/default
+      file:
+        path: "/etc/nginx/sites-enabled/default"
+        state: absent
+  
+    - name: "Create required directories in /etc/letsencrypt"
+      file:
+        path: "{{ account_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: u=rwx,g=x,o=x
+      loop: "{{ q('dict', sites, ) }}"     
+  
+
+    - name: "Create required directories in /etc/letsencrypt"
+      file:
+        path: "{{letsencrypt_dir}}"
+        state: directory     
+        owner: root
+        group: root
+        mode: u=rwx,g=x,o=x
+      loop: "{{ q('dict', sites, ) }}"     
+
+
+    - name: "Generate a Let's Encrypt account key"
+      shell: "if [ ! -f {{ letsencrypt_account_key }} ]; then openssl genrsa 4096 | sudo tee {{ letsencrypt_account_key }}; fi"
+      loop: "{{ q('dict', sites, ) }}"     
+
+    - name: "Generate Let's Encrypt private key"
+      shell: "openssl genrsa 4096 | sudo tee {{letsencrypt_dir}}/privkey.pem"
+      loop: "{{ q('dict', sites, ) }}"     
+
+    - name: "Generate Let's Encrypt CSR"
+      shell: "openssl req -new -sha256 -key {{letsencrypt_dir}}/privkey.pem -subj \"/CN={{ item.value.name }}\" -reqexts SAN -config <(cat /etc/ssl/openssl.cnf <(printf \"\n[SAN]\nsubjectAltName=DNS:{{ item.value.name }}\")) | sudo tee {{letsencrypt_dir}}/{{ item.value.name }}.csr"
+      args:
+        executable: /bin/bash
+      loop: "{{ q('dict', sites, ) }}"
+    
+   
+    - name: copy Nginx config file 
+      template:
+        src: config_sites_files/http_temp_config_file.conf
+        dest: "/etc/nginx/conf.d/{{ item.value.name }}.conf"
+      loop: "{{ q('dict', sites, ) }}"
+
+    - name: Restart service httpd, in all cases
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+
+    - name: "Reload Nginx config witjout restart"
+      shell: "nginx -s reload"
+      args:
+        executable: /bin/bash
+
+
+    - name: deploy files with network address in them
+      include_tasks: loop_acme-challenge.yml
+      loop: "{{ q('dict', sites, ) }}"
+
+
+    - name: "Create required directories in /etc/letsencrypt"
+      file:
+        path: "/etc/nginx/conf.d/{{ item.value.name }}.conf"
+        state: absent
+      loop: "{{ q('dict', sites, ) }}" 
+
+
+    - name: copy Nginx config file 
+      template:
+        src: config_sites_files/ssl_config_file.conf
+        dest: "/etc/nginx/conf.d/{{ item.value.name }}.conf"
+      loop: "{{ q('dict', sites, ) }}"
+
+
+    - name: "Reload Nginx config witjout restart"
+      shell: "nginx -s reload"
+      args:
+        executable: /bin/bash
+      register: result
+      
+    - name: Show result
+      debug:
+        msg: "{{ result }}"
+
+
+
