@@ -1,0 +1,13 @@
+users_machine_apt_packages:
+  - 'unzip'
+  - 'nginx'
+  - 'php7.4-fpm'
+  - 'php-mysql'
+  - 'pip'
+  - 'python3'
+  
+databases_apt_packages: 
+  - 'mariadb-server'
+  - 'pip'
+  - 'python3'
+  

@@ -1,0 +1,14 @@
+new_user: 
+  - joe-dalton
+  - jack-dalton
+  - william-dalton
+  - avrelle-dalton
+
+password: '$6$gEuNiFFVHz0nM/Bz$ljgMCyUr/sqTySiB65icVbCtoevl/C8AdfQk6ha/Te9m2WJuoegae2DjjoBAFf7BeDpL1zsjpN49MiRMo1e4t1'
+user_uid: 1084
+
+db_name: wordpress_{{item}}
+db_password: 'Pa$$w0rd'
+db_server_host: '10.0.0.102'
+db_client_host: '10.0.0.101'
+wordpress_version: wordpress-6.1.1.zip

@@ -1,0 +1,278 @@
+---
+- hosts: 10.0.0.101
+
+  vars_files:
+  - config_vars.yml
+
+  become: yes
+  tasks:
+
+#Debug
+#------------------------------------------------------------
+
+    - name: debug 
+      debug: msg="Var depuis fichier {{new_user}}" 
+
+#User creation 
+#------------------------------------------------------------
+
+    - name: create debian user
+      user:
+        name : "{{ item }}"
+        password : "{{password}}"
+        shell: /bin/bash
+        system: no        
+        createhome: yes
+        home: /home/{{ item }}
+        groups: www-data
+        append: yes
+      loop: "{{new_user}}"
+
+
+
+    - name: update www-data user
+      user:
+        name : www-data
+        groups: "{{ item }}"
+        append: yes
+      loop: "{{new_user}}"
+
+#    - name: Copy the default PHP-FPM pool template
+#      ansible.builtin.command: usermod -a -G "{{item}}" www-data
+#      loop: "{{new_user}}"
+
+
+
+#Make user and site direcory
+#------------------------------------------------------------------
+    - name: make directory
+      file: 
+        path: /home/{{item}}/html 
+        state: directory 
+        mode: 750
+      loop : "{{new_user}}"
+
+#    - name: Update permissions
+#      file:
+#        path: "/home/{{new_user}}"
+#        state: directory
+#        owner: www-data
+#        group: www-data
+
+#Copy fpm pool template 
+#------------------------------------------------------------
+
+    - name: Copy the default PHP-FPM pool template
+      ansible.builtin.command: cp /etc/php/7.4/fpm/pool.d/www.conf "/etc/php/7.4/fpm/pool.d/{{ item }}.conf"
+      loop: "{{new_user}}"
+
+#Modification of php-fpm file 
+#------------------------------------------------------------
+
+    - name: modify config pool.d [www]
+      ansible.builtin.replace:
+        path: /etc/php/7.4/fpm/pool.d/{{ item }}.conf
+        regexp: \[www\]
+        replace: "[{{ item }}]"
+      loop: "{{new_user}}"
+
+    - name: modify config pool.d file user
+      ansible.builtin.replace:
+        path: /etc/php/7.4/fpm/pool.d/{{ item }}.conf
+        regexp: 'user = www-data'
+        replace: "user = {{ item }}"
+      loop: "{{new_user}}"
+
+    - name: modify config pool.d group
+      ansible.builtin.replace:
+
+        path: /etc/php/7.4/fpm/pool.d/{{item}}.conf
+        regexp: 'group = www-data'
+        replace: "group = {{item}}"
+      loop: "{{new_user}}"
+
+    - name: modify config pool.d listen
+      ansible.builtin.replace:
+
+        path: /etc/php/7.4/fpm/pool.d/{{item}}.conf
+        regexp: 'listen = /run/php/php7.4-fpm.sock'
+        replace: "listen = /run/php/php7.4-fpm-{{item}}.sock"
+      loop: "{{new_user}}"
+
+#Modification of web config files
+#------------------------------------------------------------
+
+    - name: copy config file 
+      template:
+        src: files/site.conf.j2
+        dest: "/etc/nginx/sites-available/{{item}}.conf"
+      loop: "{{new_user}}"
+
+#    - name: modify config file
+#      replace:
+#        path: "/etc/nginx/sites-available/{{item}}.conf"
+#        regexp: 'site_name'
+#        replace: "{{item}}"
+#      loop: "{{new_user}}"
+
+    - name: copy skel file 
+      template:
+
+        src: files/index.php
+        dest: /etc/skel/html 
+
+    - name: Enable new site
+      file:
+        src: "/etc/nginx/sites-available/{{item}}.conf"
+        dest: "/etc/nginx/sites-enabled/{{item}}.conf"
+        state: link
+      loop: "{{new_user}}"  
+
+
+#Excrat wordpress archive from local machine  
+#------------------------------------------------------------
+
+    - name: unzip wordpress archive
+      unarchive: 
+        src: "/tmp/{{wordpress_version}}" 
+        dest: "/home/{{item}}/html/" 
+        remote_src: yes
+      loop: "{{new_user}}"
+
+#Wordpress configuration file
+#------------------------------------------------------------
+    - name: Move foo to bar
+      command: mv "/home/{{item}}/html/wordpress/wp-config-sample.php" "/home/{{item}}/html/wordpress/wp-config.php"
+      loop: "{{new_user}}"
+
+#define( 'DB_name', 'database_name_here' );
+    - name: modify db config file 
+      lineinfile:
+        path: "/home/{{item}}/html/wordpress/wp-config.php"
+        regexp: 'database_name_here'
+        line: "define( 'DB_NAME', '{{db_name}}' );"
+      loop: "{{new_user}}"
+
+#define( 'DB_USER', 'username_here' );
+    - name: modify db config file 
+      lineinfile:
+        path: "/home/{{item}}/html/wordpress/wp-config.php"
+        regexp: 'username_here'
+        line: "define( 'DB_USER', '{{item}}' );"
+      loop: "{{new_user}}"
+
+#define( 'DB_PASSWORD', 'password_here' );
+    - name: modify db config file 
+      lineinfile:
+        path: "/home/{{item}}/html/wordpress/wp-config.php"
+        regexp: 'password_here'
+        line: "define( 'DB_PASSWORD', '{{db_password}}' );"
+      loop: "{{new_user}}"
+
+#define( 'DB_HOST', 'localhost' );
+    - name: modify db config file 
+      lineinfile:
+        path: "/home/{{item}}/html/wordpress/wp-config.php"
+        regexp: 'localhost'
+        line: "define( 'DB_HOST', '{{db_server_host}}' );"
+      loop: "{{new_user}}"
+
+
+#SSL certificate
+#------------------------------------------------------------
+# pip install PyOpenSSL
+#------------------------------------------------------------------        
+    - name: pip install PyOpenSSL
+      pip:
+        name: pymysql
+        state: present
+
+# pip install PyOpenSSL
+#------------------------------------------------------------------        
+    - name: pip install cryptography
+      pip:
+        name: cryptography
+        state: present
+
+
+    - name: Generate Diffie-Hellman parameters with the default size (4096 bits)
+      community.crypto.openssl_dhparam:
+        path: /etc/nginx/dhparam.pem
+
+#    - name: create a strong Diffie-Hellman (DH) group
+#      command: openssl dhparam -out /etc/nginx/dhparam.pem 4096
+
+    - name: copy self-signed.conf file
+      template:
+        src: files/self-signed.conf.j2
+        dest: "/etc/nginx/snippets/self-signed.conf"
+
+    - name: copy ssl-params.conf file 
+      template:
+        src: files/ssl-params.conf.j2
+        dest: "/etc/nginx/snippets/ssl-params.conf"
+
+
+    - name: Ensure private key is present
+      community.crypto.openssl_privatekey:
+        path: /etc/ssl/private/private.key
+        size: 2048
+        mode: 0600
+        type: RSA
+        
+    - name: Ensure self-signed cert is present
+      community.crypto.x509_certificate:
+        path: /etc/ssl/certs/my_cert.crt
+        privatekey_path: /etc/ssl/private/private.key
+        provider: selfsigned
+        selfsigned_not_after: "+3650d" # this is the default
+        mode: 0644
+    
+#Restart Nginx ans php7.4-fpm services
+#------------------------------------------------------------
+    - name: Restart service nginx, in all cases
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+    
+    - name: Restart service php7.4-fpm, in all cases
+      ansible.builtin.service:
+        name: php7.4-fpm
+        state: restarted
+
+#------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------
+
+- hosts: 10.0.0.102
+
+  vars_files:
+  - config_vars.yml
+
+  become: yes
+  tasks:
+
+#Creation of personnal mysql user, database, password and privileges
+#------------------------------------------------------------
+
+    - name: Create mysql database "{{item}}"
+      mysql_db:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        name: "{{db_name}}"
+        state: present
+      loop: "{{new_user}}"
+
+    - name: Create user with password, all database privileges and 'WITH GRANT OPTION' in "{{item}}"
+      community.mysql.mysql_user:
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+        state: present
+        name: "{{item}}"
+        password: "{{db_password}}"
+        priv: "{{ db_name }}.*:ALL"
+        host: "{{db_client_host}}"
+      loop: "{{new_user}}"
+
+    - name: Restart mysql service
+      ansible.builtin.service:
+        name: mariadb
+        state: restarted

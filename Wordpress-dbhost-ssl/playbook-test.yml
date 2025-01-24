@@ -1,0 +1,109 @@
+#Debug
+#------------------------------------------------------------
+#    - name: Add several users
+#      ansible.builtin.user:
+#        name: "{{ item }}"
+#        state: present
+#        groups: "wheel"
+#      loop:
+#         "{{fruit}}"
+
+
+
+
+---
+- hosts: 10.0.0.101
+
+  vars_files:
+  - config_vars.yml
+  - install_vars.yml
+  become: yes
+  tasks:
+
+    - name: apt install latest - unzip , nginx , php7.4-fpm , php-mysql 
+      apt: 
+        name: "{{ item }}" 
+        update_cache: yes 
+        state: latest
+      loop: "{{users_machine_apt_packages}}" 
+
+# pip install PyOpenSSL
+#------------------------------------------------------------------        
+    - name: pip install PyOpenSSL
+      pip:
+        name: pymysql
+        state: present
+
+# pip install PyOpenSSL
+#------------------------------------------------------------------        
+    - name: pip install cryptography
+      pip:
+        name: cryptography
+        state: present
+
+#SSL certificate
+#------------------------------------------------------------
+    - name: create a strong Diffie-Hellman (DH) group
+      command: openssl dhparam -out /etc/nginx/dhparam.pem 4096
+
+    - name: copy self-signed.conf file
+      template:
+        src: files/self-signed.conf.j2
+        dest: "/etc/nginx/snippets/self-signed.conf"
+
+    - name: copy ssl-params.conf file 
+      template:
+        src: files/ssl-params.conf.j2
+        dest: "/etc/nginx/snippets/ssl-params.conf"
+
+
+    - name: Ensure private key is present
+      community.crypto.openssl_privatekey:
+        path: /etc/ssl/private/private.key
+        size: 2048
+        mode: 0600
+        type: RSA
+        
+    - name: Ensure self-signed cert is present
+      community.crypto.x509_certificate:
+        path: /etc/ssl/certs/my_cert.crt
+        privatekey_path: /etc/ssl/private/private.key
+        provider: selfsigned
+        selfsigned_not_after: "+3650d" # this is the default
+        mode: 0644
+    
+#Restart Nginx ans php7.4-fpm services
+#------------------------------------------------------------
+    - name: Restart service nginx, in all cases
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+    
+    - name: Restart service php7.4-fpm, in all cases
+      ansible.builtin.service:
+        name: php7.4-fpm
+        state: restarted
+
+
+
+#------------------------------------------------------------
+#------------------------------------------------------------------------------------------------------------------------
+#------------------------------------------------------------
+#- hosts: 10.0.0.102
+#
+#  vars_files:
+#  - config_vars.yml
+#
+#  become: yes
+#  tasks:
+#
+#
+#
+#    # Read a CSV file without headers
+#    - name: Read users from CSV file and return a list
+#      read_csv:
+#        path: username.csv
+#        fieldnames: Username, Identifier,First name,Last name
+#        delimiter: ';'
+#      register: users
+#      delegate_to: localhost

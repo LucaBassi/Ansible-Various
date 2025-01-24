@@ -1,0 +1,45 @@
+server {
+    listen 80;
+
+    server_name {{item}}.local;
+    root /home/{{item}}/html/wordpress;
+
+    access_log /var/log/nginx/{{item}}.access.log;
+    error_log /var/log/nginx/{{item}}.error.log;
+
+    index index.php index.html;
+
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/run/php/php7.4-fpm-{{item}}.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    include snippets/self-signed.conf;
+    include snippets/ssl-params.conf;
+    
+    server_name {{item}}.local;
+    root /home/{{item}}/html/wordpress;
+
+    access_log /var/log/nginx/{{item}}.access.log;
+    error_log /var/log/nginx/{{item}}.error.log;
+
+    index index.php index.html;
+
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_split_path_info ^(.+\.php)(/.+)$;
+        fastcgi_pass unix:/run/php/php7.4-fpm-{{item}}.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}

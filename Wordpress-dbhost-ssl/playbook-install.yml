@@ -1,0 +1,103 @@
+---
+- hosts: 10.0.0.101
+
+  vars_files:
+    - install_vars.yml
+
+  become: yes
+
+  tasks:
+
+# debug
+#------------------------------------------------------------------
+#    - name: debug 
+#      debug: msg="Var depuis fichier {{file_var}}" 
+
+# make skel base directory 
+#------------------------------------------------------------------
+        
+    - name: make skel directory
+      file: 
+        path: "/etc/skel/html"
+        state: directory 
+
+# apt install
+#------------------------------------------------------------------
+    - name: apt install latest - unzip , nginx , php7.4-fpm , php-mysql 
+      apt: 
+        name: "{{ item }}" 
+        update_cache: yes 
+        state: latest
+      loop: "{{users_machine_apt_packages}}" 
+
+# test
+#------------------------------------------------------------------        
+    - name: Set www-data user shell
+      user: 
+        name: www-data 
+        shell: /bin/bash
+
+# ?
+#------------------------------------------------------------------
+    - name: Give insecure permissions to an existing file
+      ansible.builtin.file:
+        path: /home
+        owner: root
+        group: root
+        mode: o+x
+
+#download wordpress on remote machine from url (pas encore utilsé)
+#------------------------------------------------------------------
+    - name: Download wordpress archive
+      ansible.builtin.get_url:
+        url: https://wordpress.org/wordpress-6.1.1.zip
+#        dest: /home/ansible-target
+        dest: /tmp
+
+
+- hosts: 10.0.0.102
+
+  vars_files:
+    - install_vars.yml
+
+  become: yes
+
+  tasks:
+# apt install
+#------------------------------------------------------------------
+    - name: apt install latest - mariadb-server  , python3 , pip
+      apt: 
+        name: "{{ item }}" 
+        update_cache: yes 
+        state: latest
+      loop: "{{databases_apt_packages}}" 
+
+# pip install pymysql
+#------------------------------------------------------------------        
+    - name: pip install pymysql
+      pip:
+        name: pymysql
+        state: present
+
+# pip install PyOpenSSL
+#------------------------------------------------------------------        
+    - name: pip install PyOpenSSL
+      pip:
+        name: pymysql
+        state: present
+
+# pip install PyOpenSSL
+#------------------------------------------------------------------        
+    - name: pip install cryptography
+      pip:
+        name: cryptography
+        state: present
+
+
+
+#bind mofify;
+    - name: modify database bind server 
+      lineinfile:
+        path: "/etc/mysql/mariadb.conf.d/50-server.cnf"
+        regexp: '(^bind-address            = 127.0.0.1)'
+        line: "bind-address            = 10.0.0.102"
