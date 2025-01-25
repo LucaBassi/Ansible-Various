@@ -1,9 +1,10 @@
 ###################################################################################
-# Purpose       :   Create new RP website and vreate Certbot SSL certificate by sites
+# Purpose       :   Deploy a Kubernetes Cluster on two node, master and worker
+#                   Can be impove to loop dynamicly on wanted number of worker nodes
 # Author        :   Luca Bassi
-# Date          :   25.10.2023
+# Date          :   20.01.2025
 # Version       :   1.1
-# Dependencies  :   None
+# Dependencies  :   Up-to-date master and worker nodes
 ###################################################################################
 
 - name: playbook_kube_cluster 

@@ -19,7 +19,7 @@
     acme_challenge_type: http-01
     acme_directory: https://acme-v02.api.letsencrypt.org/directory
     acme_version: 2
-    acme_email: 'support@devantis.com'
+    acme_email: '_mail-address_'
     letsencrypt_dir: /etc/letsencrypt/live/{{ item.value.name }}
     account_dir: '{{letsencrypt_dir}}/account'
     letsencrypt_keys_dir: '/etc/letsencrypt/{{ item.value.name }}/keys'
