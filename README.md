@@ -1,5 +1,5 @@
 # Ansible-Various
-Various Intrastructures deployments and tasks execution with Ansible
+Various Infrastructures deployments and tasks execution with Ansible
 
 ## Projects lits
 - **Kubenetes-Deploy-Cluster**
