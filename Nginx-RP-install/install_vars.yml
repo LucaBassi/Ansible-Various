@@ -1,8 +1,0 @@
-apt_packages:
-  - 'nginx'
-
-hosts_file_servernames:
-  - 'ip   fqdn'
-
-
-

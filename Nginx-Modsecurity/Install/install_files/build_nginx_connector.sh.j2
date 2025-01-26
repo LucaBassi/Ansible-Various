@@ -1,5 +1,0 @@
-cd /usr/local/src/nginx/nginx-{{nginx_version[0]}}
-apt build-dep nginx -y && apt install uuid-dev -y
-./configure --with-compat --add-dynamic-module=../ModSecurity-nginx
-make modules
-cd
