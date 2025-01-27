@@ -1,0 +1,105 @@
+###################################################################################
+# Purpose       :   Create new RP website and vreate Certbot SSL certificate by sites
+# Author        :   Luca Bassi
+# Date          :   25.10.2023
+# Version       :   1.1
+# Dependencies  :   None
+###################################################################################
+
+- name: playbook_certbot_new_site 
+
+#------------------------------------------------------------
+#
+# 0 – General Ansible configuration
+#
+#------------------------------------------------------------
+
+  hosts: rp-ms.louc.ch
+
+
+  become: yes
+  tasks:
+
+
+    - read_csv:
+        path: sites_list/sites.csv
+        delimiter: ','
+      register: sites
+      delegate_to: localhost
+
+    - debug:
+        msg: "fqdn : {{ site.fqdn }} \nip : {{ site.ip_address }}"
+      loop: "{{ sites.list }}"
+      loop_control:
+        loop_var: site   
+#------------------------------------------------------------
+#
+# 1 – Copy temporary nginx http config file for any sites for acme challange 
+#
+#------------------------------------------------------------
+
+    - name: copy Nginx http temp config file 
+      template:
+        src: config_sites_files/http_temp_config_file.conf
+        dest: "/etc/nginx/conf.d/{{ site.fqdn }}.conf"
+      loop: "{{ sites.list }}"
+      loop_control:
+        loop_var: site   
+#------------------------------------------------------------
+#
+# 2 – apply configuration
+#
+#------------------------------------------------------------
+
+    - name: "Reload Nginx config witjout restart"
+      shell: "nginx -s reload"
+      args:
+        executable: /bin/bash
+
+    - name: Pause for 5 minutes to build app cache
+      ansible.builtin.pause:
+        seconds: 5
+#------------------------------------------------------------
+#
+# 3 – Create SSl cerificate for any sites 
+#
+#------------------------------------------------------------
+
+    - name: Create SSL certificate with certbot
+      shell: 'certbot --nginx -d {{ site.fqdn }}'
+      loop: "{{ sites.list }}"
+      loop_control:
+        loop_var: site
+
+#------------------------------------------------------------
+#
+# 4 – Copy clean SSL config files 
+#
+#------------------------------------------------------------
+
+    - name: copy Nginx config file 
+      template:
+        src: config_sites_files/ssl_config_file.conf
+        dest: "/etc/nginx/conf.d/{{ site.fqdn }}.conf"
+      loop: "{{ sites.list }}"
+      loop_control:
+        loop_var: site
+
+#------------------------------------------------------------
+#
+# 5 – Apply configuration
+#
+#------------------------------------------------------------
+
+    - name: "Reload Nginx config witjout restart"
+      shell: "nginx -s reload"
+      args:
+        executable: /bin/bash
+      register: result
+      
+    - name: Show result
+      debug:
+        msg: "{{ result }}"
+
+
+

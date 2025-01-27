@@ -1,0 +1,97 @@
+---
+###################################################################################
+# Purpose       :   Configuration of Nginx Reverse Proxy
+# Author        :   Luca Bassi
+# Date          :   13.10.2023
+# Version       :   1.1
+# Dependencies  :   
+#   at . of playbook
+#   - install_vars
+#   in folder /config_nginx_files
+#   - nginx.conf
+#   in folder /config_sites_files
+#   -  All sites to enable on host 
+###################################################################################
+
+#------------------------------------------------------------
+#
+# 0 – General Ansible configuration
+#
+#------------------------------------------------------------
+
+- hosts: all
+  
+  vars_files:
+    - install_vars.yml
+
+  become: yes
+  tasks:
+
+#------------------------------------------------------------
+#
+# 0 – Prepare environnement
+#
+#------------------------------------------------------------
+
+    - name: Update apt repo and cache on all Debian/Ubuntu boxes
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+
+    - name: Install Prerequisite Packages
+      apt: 
+        name: "{{ item }}" 
+        update_cache: yes 
+        state: latest
+      loop: "{{apt_packages}}" 
+
+    - name: Add neddes servername in /etc/hosts  
+      lineinfile:
+        path: "/etc/hosts"
+        line: "{{ item }}"
+        insertbefore: BOF
+      loop: "{{hosts_file_servernames}}"
+
+#------------------------------------------------------------
+#
+# 1 – Copy Nginx config file
+#
+#------------------------------------------------------------
+
+    - name: copy Nginx config file 
+      template:
+        src: config_nginx_files/nginx.conf
+        dest: "/etc/nginx/nginx.conf"
+    
+#------------------------------------------------------------
+#
+# 2 – Copy all sites config files
+#
+#------------------------------------------------------------
+
+    - name: copy Nginx config file 
+      copy:
+        src: config_sites_files/
+        dest: "/etc/nginx/conf.d"
+
+    - name: Find all of the .conf files inside this directory
+      find:
+        paths: "/etc/nginx/conf.d/"
+        patterns: "*.conf"
+      register: config_files
+
+    - name: delete /etc/nginx/sites-enabled/default
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+    
+    - name: Restart Nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: restarted    
+      register: result
+
+    - name: Show result
+      debug:
+        msg: "{{ result }}"
+
+
+
